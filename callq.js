@@ -96,6 +96,9 @@ CallQueueClass.prototype = {
 	processTmid: null,	//process timer id
 	threadTmid: null,	//thread timer id
 
+	joinList: null,			//list for join
+	joinTailList: null,		//list for join at tail
+	
 	/**
 	 * get the index of a label
 	 * @param {string} label - a label string.
@@ -305,6 +308,9 @@ CallQueueClass.prototype = {
 
 		//normalize error
 		if (error && !(error instanceof Error)) error = Error(error);
+		
+		//call join list at current index
+		while( this.joinList && this.joinList.length>0 ) { try{ this.joinList.shift()(error,data); } catch(ex) { console.warn( "cq join exception", ex ); } }
 
 		//get next queue item
 		var qi = this.queue[this.index];
@@ -315,6 +321,10 @@ CallQueueClass.prototype = {
 			if (this.processTmid) { clearTimeout(this.processTmid); this.processTmid = null; }
 
 			if (this.debug > 1) console.log("process finish, id='" + this.processId + "'");
+			
+			//call join list at tail
+			while( this.joinTailList && this.joinTailList.length>0 ) { try{ this.joinTailList.shift()(error,data); } catch(ex) { console.warn( "cq join tail exception", ex ); } }
+			
 			return error || data || null;	//call queue end
 		}
 
@@ -452,7 +462,37 @@ CallQueueClass.prototype = {
 			}
 		}
 	},
-
+	
+	//join callback or another que, at current index, or at end when 'tail' is true
+	join: function( cb, joinTimeout, tail ) {
+		//arguments
+		if (this.isOmitTimeout(joinTimeout)) {		//optional joinTimeout
+			tail = joinTimeout; joinTimeout = 0;
+		}
+		
+		var _this, func;
+		if( cb instanceof CallQueueClass ) { _this= cb; func= cb.next; }
+		else { func= cb; }
+		
+		//timer
+		var tmid = null;
+		if (joinTimeout > 0) {
+			tmid = setTimeout( function(){ tmid = false; func.call(_this, "cq join-timeout, " + joinTimeout); }, joinTimeout );
+		}
+		
+		//add to list
+		var list= tail ? ( this.process.joinTailList || (this.process.joinTailList=[]) ) : ( this.process.joinList || (this.process.joinList=[]) );
+		
+		list.push(
+			function( err, data ){
+				if (tmid === false) { if (_this.debug > 0) console.warn("WARN: cq blocked by join-timeout, " + joinTimeout); return; }
+				if (tmid) { clearTimeout(tmid); tmid = null; }
+				
+				func.call(_this, err, data );
+			}
+		);
+	},
+	
 }
 
 module.exports = exports = function (operatorSet, operatorArray, timeout, description) {
