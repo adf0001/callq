@@ -675,4 +675,14 @@ testData={		//global data
 		cq(null, queData , "p1");
 		cq(null, queData , "p2");
 	},
+	".isQue()": function(done){
+		cq(null, [
+			function (error, data, que) {
+				data = cq.isQue(que) && !cq.isQue(data);
+				var expect = true;
+				done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				que.next(null, data);
+			},
+		], "isQue");
+	},
 };

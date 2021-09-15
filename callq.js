@@ -507,4 +507,5 @@ module.exports = exports = function (operatorSet, operatorArray, timeout, descri
 }
 
 exports.class = CallQueueClass;
+exports.isQue = function(obj){ return (obj instanceof CallQueueClass); }
 
