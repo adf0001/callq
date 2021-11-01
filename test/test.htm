@@ -1,152 +1,158 @@
 ﻿<html>
-<!-- template from https://github.com/adf0001/test.htm -->
+<!-- test page from test.htm @ npm -->
+
 <head>
-<meta charset='utf-8'>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes" />
+	<meta charset='utf-8'>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes" />
 
-<title>test</title>
+	<title>test</title>
 
-<style>
-.ht-cmd {
-	color: green;
-	text-decoration: underline;
-	cursor: pointer;
-	font-size: 9pt;
-}
-.ht-cmd:hover{
-	background:#eeeeee;
-}
-</style>
+	<style>
+		.ht-cmd {
+			color: green;
+			text-decoration: underline;
+			cursor: pointer;
+			font-size: 9pt;
+		}
+
+		.ht-cmd:hover {
+			background: #eeeeee;
+		}
+	</style>
 </head>
+
 <body onload="onBodyLoad()" style="padding-left:10em;">
 
-<div style='width:10em;position:fixed;left:0px;top:0px;bottom:0px;border-right:1px solid gray;overflow:auto;'>
-	<center style='font-weight:bold;' id='txtTitle'>test</center>
-	<div id='spCmdList' onclick="onClickItem(arguments[0])" style='padding:0.5em;'></div>
-</div>
+	<div style='width:10em;position:fixed;left:0px;top:0px;bottom:0px;border-right:1px solid gray;overflow:auto;'>
+		<center style='font-weight:bold;' id='txtTitle'>test</center>
+		<div id='spCmdList' onclick="onClickItem(arguments[0])" style='padding:0.5em;'></div>
+	</div>
 
-name<br>
-<input id='inpName' type='text' readonly style='background:#eee;'></input><br>
-code<br>
-<textarea id='txtCode' wrap='off' style="width:95%;height:10em;tab-size:4;"></textarea><br>
-<button onclick="runItem()" id='btnRun'>run</button>
-<hr>
-<div id='divResult'></div>
-<div id='divResult2'></div>
-<div id='divResult3' style="font-size:9pt;"></div>
+	name<br>
+	<input id='inpName' type='text' readonly style='background:#eee;'></input><br>
+	code<br>
+	<textarea id='txtCode' wrap='off' style="width:95%;height:10em;tab-size:4;"></textarea><br>
+	<button onclick="runItem()" id='btnRun'>run</button>
+	<hr>
+	<div id='divResult'></div>
+	<div id='divResult2'></div>
+	<div id='divResult3' style="font-size:9pt;"></div>
 
 </body>
 
 <script>
+	var _test_data;
 
-// page code
+	// page code
 
-var _ele= function(idOrEl){ return ( typeof idOrEl==="string")? document.getElementById(idOrEl) : idOrEl;}
+	var _ele = function (idOrEl) { return (typeof idOrEl === "string") ? document.getElementById(idOrEl) : idOrEl; }
 
-var _dateString19= function (dt) {
-	if( !dt ) dt= new Date();
-	
-	var s = dt.getFullYear() + "-" + (dt.getMonth() + 1) + "-" + dt.getDate() +
-		" " + dt.getHours() + ":" + dt.getMinutes() + ":" + dt.getSeconds();
-	return s.replace(/\b(\d)\b/g, "0$1");
-}
+	var _dateString19 = function (dt) {
+		if (!dt) dt = new Date();
 
-function runItem( func ){
-	_ele('divResult').innerHTML=  _ele('divResult2').innerHTML=  _ele('divResult3').innerHTML= "";
-	var name= _ele('inpName').value;
-	
-	setOk(name,null,1);		//reset color
-	
-	try{
-		var ret= func ? func( function(ret){doneCallback(ret,name)} ) : eval(_ele('txtCode').value);
-		if( typeof ret!=="undefined" ) setOk(name, !ret );
+		var s = dt.getFullYear() + "-" + (dt.getMonth() + 1) + "-" + dt.getDate() +
+			" " + dt.getHours() + ":" + dt.getMinutes() + ":" + dt.getSeconds();
+		return s.replace(/\b(\d)\b/g, "0$1");
 	}
-	catch(ex){
-		console.log(ex);
-		_ele('divResult').textContent= ex;
-		return;
+
+	function runItem(func) {
+		_ele('divResult').innerHTML = _ele('divResult2').innerHTML = _ele('divResult3').innerHTML = "";
+		var name = _ele('inpName').value;
+
+		setOk(name, null, 1);		//reset color
+
+		try {
+			var ret = func ? func(function (ret) { doneCallback(ret, name) }) : eval(_ele('txtCode').value);
+			if (typeof ret !== "undefined") setOk(name, !ret);
+		}
+		catch (ex) {
+			console.log(ex);
+			_ele('divResult').textContent = ex;
+			if( (ex.message || ex)==="disable for browser" ) setOk(name, "disable");
+			return;
+		}
+		_ele('divResult').innerHTML = _dateString19(new Date()).slice(-8) + " / " + _ele('inpName').value + "<br>" + ret;
 	}
-	_ele('divResult').innerHTML= _dateString19(new Date()).slice(-8) + " / " + _ele('inpName').value + "<br>" + ret;
-}
 
-function onClickItem(evt){
-	var el= evt.target;
-	if( el.tagName.toUpperCase()!="SPAN" || el.className.indexOf("ht-cmd")<0 ) return;
-	
-	var name= el.textContent;
-	_ele('inpName').value= name;
-	
-	var item= testData[name], sCode;
-	if( typeof item==="function" ){ sCode= ("(\n\t"+item+"\n)(function(ret){doneCallback(ret,'"+name+"')})"); }
-	else{ sCode= item; }
-	_ele('txtCode').value= sCode;
-	
-	_ele('divResult').innerHTML=  _ele('divResult2').innerHTML=  _ele('divResult3').innerHTML= "";
-	if( !sCode ) return;
-	
-	runItem( ( typeof item==="function" ) ? item : null );	//run function at the 1st time, to enable inline debugger.
-}
+	function onClickItem(evt) {
+		var el = evt.target;
+		if (el.tagName.toUpperCase() != "SPAN" || el.className.indexOf("ht-cmd") < 0) return;
 
-var runAllDelay=0;
-var runAllKeys= null;
+		var name = el.textContent;
+		_ele('inpName').value = name;
 
-function runAll( idx ){
-	if( ! idx ){
-		//initial
-		var delay= window.prompt("Click 'OK' to run all,\nand delay between each item at milliseconds",runAllDelay);
-		if( ! delay ) return;
-		runAllDelay= parseInt(delay)||0;
-		if( runAllDelay<0 ) runAllDelay=0;
-		
-		runAllKeys= Object.keys(testData);
+		var item = _test_data[name], sCode;
+		if (typeof item === "function") { sCode = ("(\n\t" + item + "\n)(function(ret){doneCallback(ret,'" + name + "')})"); }
+		else { sCode = item; }
+		_ele('txtCode').value = sCode;
+
+		_ele('divResult').innerHTML = _ele('divResult2').innerHTML = _ele('divResult3').innerHTML = "";
+		if (!sCode) return;
+
+		runItem((typeof item === "function") ? item : null);	//run function at the 1st time, to enable inline debugger.
 	}
-	
-	idx= idx || 0;
-	onClickItem( {target:_ele('spCmdList').querySelector("span[name='"+runAllKeys[idx].replace(/\W/g,"-")+"']")} );
-	
-	idx++;
-	if( idx< runAllKeys.length ) setTimeout( function(){ runAll(idx) }, runAllDelay );
-}
 
-function onBodyLoad(){
-	var ks= Object.keys(testData);
-	_ele('spCmdList').innerHTML=  ks.map( function(v){return "\n<span class='ht-cmd' name=\""+v.replace(/\W/g,"-")+"\">" +v+"</span>";}).join("<br>")+
-		"<div style='font-size:9pt;font-weight:bold;text-align:right;'>count: <i class='ht-cmd' onclick='runAll()' title='run all ...'>"+ks.length+"</i></div>";
-}
+	var runAllDelay = 0;
+	var runAllKeys = null;
 
-function setOk(name, fail, reset){
-	_ele('spCmdList').querySelector("span[name='"+name.replace(/\W/g,"-")+"']").style.background=reset?"":(fail?"red":"lime");
-}
+	function runAll(idx) {
+		if (!idx) {
+			//initial
+			var delay = window.prompt("Click 'OK' to run all,\nand delay between each item at milliseconds", runAllDelay);
+			if (!delay) return;
+			runAllDelay = parseInt(delay) || 0;
+			if (runAllDelay < 0) runAllDelay = 0;
 
-function doneCallback( ret, setOkName ){
-	_ele('divResult2').innerHTML= ret;
-	if( setOkName ) setOk(setOkName, ret);
-}
+			runAllKeys = Object.keys(_test_data);
+		}
 
-function setHtmlPage( name, itemsColWidth, itemsColCount ){
-	if( name ) {
-		document.title="test - "+name;
-		_ele('txtTitle').innerHTML= "test "+name;
+		idx = idx || 0;
+		onClickItem({ target: _ele('spCmdList').querySelector("span[name='" + runAllKeys[idx].replace(/\W/g, "-") + "']") });
+
+		idx++;
+		if (idx < runAllKeys.length) setTimeout(function () { runAll(idx) }, runAllDelay);
 	}
-	if( itemsColWidth ) {
-		_ele('txtTitle').parentNode.style.width= itemsColWidth;
-		document.body.style.paddingLeft= itemsColWidth;
-	}
-	if( itemsColCount>1 ){
-		_ele('spCmdList').style.columnCount= itemsColCount;
-	}
-}
 
-function showResult( text, divIndex, fail ){
-	_ele('divResult'+(divIndex||"")).innerHTML= (text+"").replace( /\n/g, "<br>");
-	if( fail || fail===false ) setOk( _ele('inpName').value, fail );
-}
+	function onBodyLoad() {
+		setHtmlPage(require("_package_json").name);
+
+		_test_data = require("_test_data");
+
+		var ks = Object.keys(_test_data);
+		_ele('spCmdList').innerHTML = ks.map(function (v) { return "\n<span class='ht-cmd' name=\"" + v.replace(/\W/g, "-") + "\">" + v + "</span>"; }).join("<br>") +
+			"<div style='font-size:9pt;font-weight:bold;text-align:right;'>count: <i class='ht-cmd' onclick='runAll()' title='run all ...'>" + ks.length + "</i></div>";
+	}
+
+	function setOk(name, fail, reset) {
+		_ele('spCmdList').querySelector("span[name='" + name.replace(/\W/g, "-") + "']").style.background = reset ? "" : ((fail==="disable")?"yellow":(fail ? "red" : "lime"));
+	}
+
+	function doneCallback(ret, setOkName) {
+		_ele('divResult2').innerHTML = ret;
+		if (setOkName) setOk(setOkName, ret);
+	}
+
+	function setHtmlPage(name, itemsColWidth, itemsColCount) {
+		if (name) {
+			document.title = "test - " + name;
+			_ele('txtTitle').innerHTML = "test " + name;
+		}
+		if (itemsColWidth) {
+			_ele('txtTitle').parentNode.style.width = itemsColWidth;
+			document.body.style.paddingLeft = itemsColWidth;
+		}
+		if (itemsColCount > 1) {
+			_ele('spCmdList').style.columnCount = itemsColCount;
+		}
+	}
+
+	function showResult(text, divIndex, fail) {
+		_ele('divResult' + (divIndex || "")).innerHTML = (text + "").replace(/\n/g, "<br>");
+		if (fail || fail === false) setOk(_ele('inpName').value, fail);
+	}
 
 </script>
 
-<script src='../release/bundle.js'></script>
-
-<script src='./test-data.js'></script>
+<script src='../debug/bundle.debug.js'></script>
 
 </html>
-

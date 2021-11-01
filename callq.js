@@ -29,8 +29,8 @@ convention:
 		* an array of
 			{ label:"labelN", timeout:timeoutN, op:operatorN }
 
-			* label: new label string for the operator;
-			* timeout: timeout number for the operator, in milliseconds;
+			* label: default-label string for the operator;
+			* timeout: default-timeout number for the operator, in milliseconds;
 			* op:
 				* an operator function.
 				* or an existing label string of an operator in the operator-set;
@@ -51,8 +51,29 @@ convention:
 		1. root: static call-queue object with a user-defined `operator-set`
 		2. process: run user-defined `operator-array` by tools of call-queue class
 		3. thread: run user-defined operator.
+	
+	* call stack
+		queue
+			.next()	/ .wait() / .waitVoid()
+				.jump()
+					.pick() / .run()
+						.if() / ifError() / ifData()
+						.loop()
+						.fork()
+		.join()
+
+	* all *-timeout arguments are optional.
+
 */
 
+//////////////////////////////////////////////////
+// tools
+
+var isOmitTimeout = function (v) { return typeof v !== "undefined" && typeof v !== "number"; };
+
+
+//////////////////////////////////////////////////
+// call queue class
 
 function CallQueueClass(operatorSet) {
 	this.root = this;
@@ -69,8 +90,6 @@ var STATE_PROCESS_TIMEOUT = 3;		//virtual process timeout
 var STATE_THREAD_PENDING = 11;	//virtual thread pending
 var STATE_THREAD_FINISHED = 12;	//virtual thread finished
 var STATE_THREAD_TIMEOUT = 13;	//virtual thread timeout
-
-//var REG_OPTIONAL = /^optional(\.update)?$/;
 
 var processIdSeed = 0;
 
@@ -141,6 +160,18 @@ CallQueueClass.prototype = {
 					}
 					else if (oai in refProcess.labelSet) {
 						rqi = refProcess.queue[refProcess.labelIndex(oai)];
+						if (timeout || label || newLabel) {
+							/*
+							rqi = Object.create(rqi);
+							if (timeout) rqi.timeout = timeout;
+							if (label || newLabel) rqi.label = newLabel || label;
+							*/
+							rqi = {		//override rqi
+								timeout: timeout || rqi.timeout,
+								label: newLabel || label || rqi.label,
+								op: rqi.op,
+							};
+						}
 						if (rqi.label) this.labelSet[rqi.label] = this.queue.length;
 						this.queue.push(rqi);
 						op = timeout = label = newLabel = null;
@@ -156,8 +187,8 @@ CallQueueClass.prototype = {
 				else { newLabel = oai; }
 			}
 			else if (oai_ts === "object") {
-				if (oai.label) { newLabel = oai; }
-				if (oai.timeout) { timeout = oai; }
+				if (oai.label && !newLabel) { newLabel = oai; }		//new label cover the old
+				if (oai.timeout && !timeout) { timeout = oai; }		//new timeout cover the old
 				if (oai.op) {
 					if (typeof oai.op === "function") {
 						op = oai.op;
@@ -196,11 +227,9 @@ CallQueueClass.prototype = {
 		}
 	},
 
-	isOmitTimeout: function (v) { return typeof v !== "undefined" && typeof v !== "number"; },
-
 	//run a new process
 	run: function (error, data, operatorArray, runTimeout, runTimeoutLabel, runDescription) {
-		if (this.isOmitTimeout(runTimeout)) {		//optional runTimeout
+		if (isOmitTimeout(runTimeout)) {		//optional runTimeout
 			runDescription = runTimeoutLabel; runTimeoutLabel = runTimeout; runTimeout = 0;
 		}
 
@@ -236,33 +265,70 @@ CallQueueClass.prototype = {
 		return process.next(error, data);
 	},
 
-	//like `.run()` but continue current process
-	pick: function (error, data, pickArray, pickTimeout, jumpLabel, jumpTimeout, pickDescription) {
-		if (this.isOmitTimeout(pickTimeout)) {		//optional pickTimeout
-			pickDescription = jumpTimeout; jumpTimeout = jumpLabel; jumpLabel = pickTimeout; pickTimeout = 0;
+	//like `.run()` but continue current process; 
+	//when `pickArray` is null or empty, `.pick()` is same as `.jump(finalLabel)`;
+	pick: function (error, data, pickArray, pickTimeout, finalLabel, finalTimeout, pickDescription) {
+		if (isOmitTimeout(pickTimeout)) {		//optional pickTimeout
+			pickDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = pickTimeout; pickTimeout = 0;
 		}
-		if (this.isOmitTimeout(jumpTimeout)) {		//optional jumpTimeout
-			pickDescription = jumpTimeout; jumpTimeout = 0;
+		if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
+			pickDescription = finalTimeout; finalTimeout = 0;
+		}
+
+		var isArray;
+		if (!pickArray || ((isArray = (pickArray instanceof Array)) && !(pickArray.length > 0))) {
+			return this.jump(error, data, finalLabel, finalTimeout);
 		}
 
 		var _this = this;
 		var cb = function (error, data, que) {
 			if (que.process.state == STATE_PROCESS_RUNNING) que.next();
-			_this.jump(error, data, jumpLabel, jumpTimeout);
+			_this.jump(error, data, finalLabel, finalTimeout);
 		};
 
-		if (!(pickArray instanceof Array)) pickArray = [pickArray];
+		if (!isArray) pickArray = [pickArray];
 		return this.run(error, data, pickArray.concat(cb), pickTimeout, cb, pickDescription);
 	},
 
-	loop: function (error, data, conditionFunc, loopArray, finalLabel, finalTimeout, loopDescription) {
-		if (this.isOmitTimeout(finalTimeout)) {		//optional finalTimeout
+	//condition: a function(error, data) returned boolean value, or `null` to check error/data, or a boolean value.
+	"if": function (error, data, condition, falseArray, trueArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+		if (isOmitTimeout(ifTimeout)) {		//optional ifTimeout
+			ifDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = ifTimeout; ifTimeout = 0;
+		}
+		if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
+			ifDescription = finalTimeout; finalTimeout = 0;
+		}
+
+		if (typeof condition === "function") condition = condition(error, data);
+		else if (condition === null) condition = error;
+
+		return this.pick(error, data, condition ? trueArray : falseArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	},
+
+	ifError: function (error, data, errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+		return this["if"](error, data, !error, errorArray, null, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	},
+	ifData: function (error, data, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+		return this["if"](error, data, !error, null, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	},
+
+	//initCondition: a function(condition:{error, data}), or directly a condition object whose shallow properties is protected;
+	//checkCondition: a function(condition) return boolean value; or null to check error/data
+	"loop": function (error, data, initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription) {
+		if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
 			loopDescription = finalTimeout; finalTimeout = 0;
 		}
 
+		var condition;
+		if (typeof initCondition === "function") initCondition(condition = { error: error, data: data });
+		else condition = Object.create(initCondition) || {};	//re-use initCondition object, and protect its shallow properties.
+
 		var cnt = 0;
 		var cbLoop = function (error, data, que) {
-			if (conditionFunc()) {
+			condition.data = data;
+			condition.error = error;
+
+			if ((checkCondition && checkCondition(condition)) || (!checkCondition && !error)) {
 				return que.pick(error, data, loopArray, cbLoop, loopDescription ? (loopDescription + "-" + (cnt++)) : null);
 			}
 			else return que.jump(error, data, finalLabel, finalTimeout);
@@ -372,7 +438,7 @@ CallQueueClass.prototype = {
 		}
 	},
 
-	//enclose `.next()` to error-first callback
+	//enclose `.next()` to error-first callback( error, data )
 	wait: function (/*error, data,*/ waitTimeout, nextTimeout) {
 		var tmid = null;
 		var _this = this;
@@ -389,6 +455,23 @@ CallQueueClass.prototype = {
 		}
 	},
 
+	//enclose `.next()` to a void callback( ), with previous error and data.
+	waitVoid: function (error, data, waitTimeout, nextTimeout) {
+		var tmid = null;
+		var _this = this;
+
+		if (waitTimeout > 0) {
+			tmid = setTimeout(function () { tmid = false; _this.next("cq waitVoid-timeout, " + waitTimeout); }, waitTimeout);
+		}
+
+		return function () {
+			if (tmid === false) { if (_this.debug > 0) console.warn("WARN: cq blocked by waitVoid-timeout, " + waitTimeout); return; }
+			if (tmid) { clearTimeout(tmid); tmid = null; }
+
+			return _this.next(error, data, nextTimeout);
+		}
+	},
+
 	markCallback: function (mark, callback, thisObject) {
 		return function () {
 			return callback.apply(thisObject, [mark].concat(Array.prototype.slice.apply(arguments)));
@@ -397,7 +480,7 @@ CallQueueClass.prototype = {
 
 	/*
 	forkSettings: {
-		mode: "all"|"allOrError"|"any"|"anyData"|"optional"|"optional.update"|user-defined,
+		mode: "all"|"allOrError"|"any"|"anyData"|user-defined,
 		timeout: 0,
 		description:""
 		pickSet:{
@@ -408,7 +491,7 @@ CallQueueClass.prototype = {
 
 	async callback: ( error, [ result, resultCount, lastResultLabel ] )
 	*/
-	fork: function (error, data, forkSettings, jumpLabel, jumpTimeout) {
+	fork: function (error, data, forkSettings, finalLabel, finalTimeout) {
 		var result = {};	//map labelN to [ errorN, dataN ]
 		var resultCount = 0, blocked = false;
 		var resultCountMax = Object.keys(forkSettings.pickSet).length;
@@ -416,7 +499,7 @@ CallQueueClass.prototype = {
 		var tmid = null;
 		var _this = this;
 		if (forkSettings.timeout > 0) {
-			tmid = setTimeout(function () { tmid = false; blocked = true; _this.jump("cq fork-timeout, " + forkSettings.timeout, [result, resultCount, null], jumpLabel, jumpTimeout); }, forkSettings.timeout);
+			tmid = setTimeout(function () { tmid = false; blocked = true; _this.jump("cq fork-timeout, " + forkSettings.timeout, [result, resultCount, null], finalLabel, finalTimeout); }, forkSettings.timeout);
 		}
 
 		var mode = forkSettings.mode || "all";
@@ -425,10 +508,9 @@ CallQueueClass.prototype = {
 		var markCheck = function (mark, error, data, que) {
 			if (tmid === false) { if (_this.debug > 0) console.warn("WARN: cq fork timeout blocked"); return; }
 
-			if (blocked) { if (_this.debug > 0) console.warn("WARN: fork blocked - " + (mode || "others")); return; }
+			if (blocked) { if (_this.debug > 0) console.warn("WARN: fork blocked - " + mode); return; }
 
-			if (!result[mark]) { resultCount++; }
-			if (!result[mark] || mode === "optional.update") { result[mark] = [error, data]; }
+			if (!result[mark]) { resultCount++; result[mark] = [error, data]; }
 
 			if (mode === "all") { if (resultCount < resultCountMax) return; blocked = true; }
 			else if (mode === "allOrError") { if (resultCount < resultCountMax && !error) return; blocked = true; }
@@ -437,11 +519,11 @@ CallQueueClass.prototype = {
 
 			if (blocked && tmid) { clearTimeout(tmid); tmid = null; }	//try stop fork timer
 
-			var ret = que.jump(null, [result, resultCount, mark], jumpLabel, jumpTimeout);
+			var ret = que.jump(null, [result, resultCount, mark], finalLabel, finalTimeout);
 
-			if (!blocked && ret && !mode.match(REG_OPTIONAL)) {
-				blocked = true;	//block others
-				if (tmid) { clearTimeout(tmid); tmid = null; }	//try stop fork timer, after blocking others.
+			if (!blocked && ret) {
+				blocked = true;	//block user-defined, if jump() return true.
+				if (tmid) { clearTimeout(tmid); tmid = null; }	//try stop fork timer, after blocking user-defined.
 			}
 
 			return ret;
@@ -466,7 +548,7 @@ CallQueueClass.prototype = {
 	//join callback or another que, at current index, or at end when 'tail' is true
 	join: function (cb, joinTimeout, tail) {
 		//arguments
-		if (this.isOmitTimeout(joinTimeout)) {		//optional joinTimeout
+		if (isOmitTimeout(joinTimeout)) {		//optional joinTimeout
 			tail = joinTimeout; joinTimeout = 0;
 		}
 
@@ -495,10 +577,64 @@ CallQueueClass.prototype = {
 
 }
 
+//////////////////////////////////////////////////
+//flow control
+
+/*
+var jump = function (jumpLabel, jumpTimeout) {
+	return function (error, data, que) {
+		return que.jump(error, data, jumpLabel, jumpTimeout);
+	}
+}
+
+var _if = function (condition, falseArray, trueArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+	return function (error, data, que) {
+		return que["if"](error, data, condition, falseArray, trueArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	}
+}
+
+var ifError = function (errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+	return function (error, data, que) {
+		return que.ifError(error, data, errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	}
+}
+
+var ifData = function (dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
+	return function (error, data, que) {
+		return que.ifData(error, data, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
+	}
+}
+
+var _loop = function (initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription) {
+	return function (error, data, que) {
+		return que.loop(error, data, initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription);
+	}
+}
+
+*/
+
+function createFlow(name) {
+	return function (/*any*/) {
+		var arguments0 = arguments;
+		return function (error, data, que) {
+			return que[name].apply(que, [error, data].concat(Array.prototype.slice.call(arguments0)));
+		}
+	}
+}
+
+var fork = function (forkMode, pickSet, finalLabel, finalTimeout) {
+	return function (error, data, que) {
+		return que.fork(error, data, { mode: forkMode, pickSet: pickSet }, finalLabel, finalTimeout);
+	}
+}
+
+//////////////////////////////////////////////////
+//module
+
 module.exports = exports = function (operatorSet, operatorArray, timeout, description) {
 	if (!operatorArray) throw "cq empty operatorArray";
 
-	if (CallQueueClass.prototype.isOmitTimeout(timeout)) {		//optional timeout
+	if (isOmitTimeout(timeout)) {		//optional timeout
 		description = timeout; timeout = 0;
 	}
 
@@ -509,3 +645,10 @@ module.exports = exports = function (operatorSet, operatorArray, timeout, descri
 exports.class = CallQueueClass;
 exports.isQue = function (obj) { return (obj instanceof CallQueueClass); }
 
+exports.jump = createFlow("jump");
+exports.if = createFlow("if");
+exports.ifError = createFlow("ifError");
+exports.ifData = createFlow("ifData");
+exports.loop = createFlow("loop");
+
+exports.fork = fork;
