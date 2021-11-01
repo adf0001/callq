@@ -54,13 +54,14 @@ convention:
 	
 	* call stack
 		queue
-			.next()	/ .wait() / .waitVoid()
-				.jump()
-					.pick() / .run()
+			.next()	/ .wait() / .waitVoid()	/ thread
+				.jump()	/ thread
+					.pick() / .run() / process
 						.if() / ifError() / ifData()
 						.loop()
 						.fork()
-		.join()
+
+						cq.join()
 
 	* all *-timeout arguments are optional.
 
@@ -114,9 +115,6 @@ CallQueueClass.prototype = {
 	//timer id: when timeout, it will be set to `false`; when stop normally, it will be set to `null`.
 	processTmid: null,	//process timer id
 	threadTmid: null,	//thread timer id
-
-	joinList: null,			//list for join
-	joinTailList: null,		//list for join at tail
 
 	/**
 	 * get the index of a label
@@ -375,9 +373,6 @@ CallQueueClass.prototype = {
 		//normalize error
 		if (error && !(error instanceof Error)) error = Error(error);
 
-		//call join list at current index
-		while (this.joinList && this.joinList.length > 0) { try { this.joinList.shift()(error, data); } catch (ex) { console.warn("cq join exception", ex); } }
-
 		//get next queue item
 		var qi = this.queue[this.index];
 		if (!qi) {
@@ -387,9 +382,6 @@ CallQueueClass.prototype = {
 			if (this.processTmid) { clearTimeout(this.processTmid); this.processTmid = null; }
 
 			if (this.debug > 1) console.log("process finish, id='" + this.processId + "'");
-
-			//call join list at tail
-			while (this.joinTailList && this.joinTailList.length > 0) { try { this.joinTailList.shift()(error, data); } catch (ex) { console.warn("cq join tail exception", ex); } }
 
 			return error || data || null;	//call queue end
 		}
@@ -545,37 +537,8 @@ CallQueueClass.prototype = {
 		}
 	},
 
-	//join callback or another que, at current index, or at end when 'tail' is true
-	join: function (cb, joinTimeout, tail) {
-		//arguments
-		if (isOmitTimeout(joinTimeout)) {		//optional joinTimeout
-			tail = joinTimeout; joinTimeout = 0;
-		}
-
-		var _this, func;
-		if (cb instanceof CallQueueClass) { _this = cb; func = cb.next; }
-		else { func = cb; }
-
-		//timer
-		var tmid = null;
-		if (joinTimeout > 0) {
-			tmid = setTimeout(function () { tmid = false; func.call(_this, "cq join-timeout, " + joinTimeout); }, joinTimeout);
-		}
-
-		//add to list
-		var list = tail ? (this.process.joinTailList || (this.process.joinTailList = [])) : (this.process.joinList || (this.process.joinList = []));
-
-		list.push(
-			function (err, data) {
-				if (tmid === false) { if (_this.debug > 0) console.warn("WARN: cq blocked by join-timeout, " + joinTimeout); return; }
-				if (tmid) { clearTimeout(tmid); tmid = null; }
-
-				func.call(_this, err, data);
-			}
-		);
-	},
-
 }
+
 
 //////////////////////////////////////////////////
 //flow control
@@ -584,6 +547,12 @@ CallQueueClass.prototype = {
 var jump = function (jumpLabel, jumpTimeout) {
 	return function (error, data, que) {
 		return que.jump(error, data, jumpLabel, jumpTimeout);
+	}
+}
+
+var pick = function (pickArray, pickTimeout, finalLabel, finalTimeout, pickDescription) {
+	return function (error, data, que) {
+		return que.pick(error, data, pickArray, pickTimeout, finalLabel, finalTimeout, pickDescription);
 	}
 }
 
@@ -628,6 +597,43 @@ var fork = function (forkMode, pickSet, finalLabel, finalTimeout) {
 	}
 }
 
+var join = function (joinArray, joinTimeout, finalLabel, finalTimeout, joinDescription) {
+	if (isOmitTimeout(joinTimeout)) {		//optional joinTimeout
+		joinDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = joinTimeout; joinTimeout = 0;
+	}
+	if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
+		joinDescription = finalTimeout; finalTimeout = 0;
+	}
+
+	var running = 0;
+	var queList = [];
+
+	return function (error, data, que) {
+		queList.push(que);
+		if (running) return;
+
+		running = 1;
+		var cb = function (error, data, que) {
+			var ret, ret0, ret0Done = 0;
+
+			while (queList.length > 0) {
+				try {
+					ret = queList.shift().jump(error, data, finalLabel, finalTimeout);
+				}
+				catch (ex) { console.warn("cq join exception", ex); }
+
+				if (!ret0Done) { ret0 = ret; ret0Done = 1; }	//get 1st ret
+			}
+			running = 0;
+
+			return ret0;
+		}
+
+		return que.pick(error, data, joinArray, joinTimeout, cb, joinDescription);
+	}
+}
+
+
 //////////////////////////////////////////////////
 //module
 
@@ -646,9 +652,12 @@ exports.class = CallQueueClass;
 exports.isQue = function (obj) { return (obj instanceof CallQueueClass); }
 
 exports.jump = createFlow("jump");
+exports.pick = createFlow("pick");
 exports.if = createFlow("if");
 exports.ifError = createFlow("ifError");
 exports.ifData = createFlow("ifData");
 exports.loop = createFlow("loop");
 
 exports.fork = fork;
+
+exports.join = join;

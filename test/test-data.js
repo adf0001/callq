@@ -612,99 +612,6 @@ module.exports = {
 		], 'fork-any');
 	},
 
-	"join": function (done) {
-		var seq = ["0"];
-
-		var lastQue = null;
-
-		var doneFlag = 0;
-
-		var queData = [
-			function (error, data, que) {
-				seq.push(data = seq[seq.length - 1] + ",1");
-				setTimeout(function () { que.next(null, data); }, 50);
-			},
-			"slow", function (error, data, que) {
-				if (lastQue) {
-					lastQue.join(que);
-					return;
-				}
-				console.log("slow " + que.processId);
-				seq.push(data = seq[seq.length - 1] + ",2-slow");
-				lastQue = que;
-				setTimeout(function () { lastQue = null; que.next(null, data); }, 300);
-			},
-			function (error, data, que) {
-				console.log("3 " + que.processId);
-				seq.push(data = seq[seq.length - 1] + ",3");
-				setTimeout(function () { que.next(null, data); }, 50);
-			},
-			function (error, data, que) {
-				showResult(seq.join("\n"), 3);
-
-				data = seq[seq.length - 1];
-				var expect = "0,1,1,2-slow,3,3";
-
-				if (doneFlag) {
-					done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
-				}
-				doneFlag++;
-
-				que.next(null, data);
-			},
-		];
-
-		cq(null, queData, "p1");
-		cq(null, queData, "p2");
-	},
-
-	"join/tail": function (done) {
-		var seq = ["0"];
-
-		var lastQue = null;
-
-		var doneFlag = 0;
-
-		var queData = [
-			function (error, data, que) {
-				seq.push(data = seq[seq.length - 1] + ",1");
-				setTimeout(function () { que.next(null, data); }, 50);
-			},
-			"slow", function (error, data, que) {
-				if (lastQue) {
-					lastQue.join(que, true);
-					return;
-				}
-				console.log("slow " + que.processId);
-				seq.push(data = seq[seq.length - 1] + ",2-slow");
-				lastQue = que;
-				setTimeout(function () { lastQue = null; que.next(null, data); }, 300);
-			},
-			function (error, data, que) {
-				console.log("3 " + que.processId);
-				seq.push(data = seq[seq.length - 1] + ",3");
-				setTimeout(function () { que.next(null, data); }, 50);
-			},
-			function (error, data, que) {
-				seq.push(data = seq[seq.length - 1] + ",last");
-
-				showResult(seq.join("\n"), 3);
-
-				data = seq[seq.length - 1];
-				var expect = "0,1,1,2-slow,3,last,3,last";
-
-				if (doneFlag) {
-					done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
-				}
-				doneFlag++;
-
-				que.next(null, data);
-			},
-		];
-
-		cq(null, queData, "p1");
-		cq(null, queData, "p2");
-	},
 	".isQue()": function (done) {
 		cq(null, [
 			function (error, data, que) {
@@ -942,6 +849,48 @@ module.exports = {
 				que.next(null, data);
 			},
 		], 'flow:fork-any');
+	},
+
+	"flow:join()": function (done) {
+		var seq = ["0"];
+
+		var doneFlag = 0;
+
+		var queData = [
+			function (error, data, que) {
+				seq.push(data = seq[seq.length - 1] + ",1");
+				setTimeout(function () { que.next(null, data); }, 50);
+			},
+			cq.join("slow", "3", "join-1"),
+			"slow", function (error, data, que) {
+
+				console.log("slow " + que.processId);
+				seq.push(data = seq[seq.length - 1] + ",2-slow");
+				//lastQue = que;
+				setTimeout(function () { que.next(null, data); }, 300);
+			},
+			"3", function (error, data, que) {
+				console.log("3 " + que.processId);
+				seq.push(data = seq[seq.length - 1] + ",3");
+				setTimeout(function () { que.next(null, data); }, 50);
+			},
+			function (error, data, que) {
+				showResult(seq.join("\n"), 3);
+
+				data = seq[seq.length - 1];
+				var expect = "0,1,1,2-slow,3,3";
+
+				if (doneFlag) {
+					done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				}
+				doneFlag++;
+
+				que.next(null, data);
+			},
+		];
+
+		cq(null, queData, "p1");
+		cq(null, queData, "p2");
 	},
 
 };
