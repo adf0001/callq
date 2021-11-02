@@ -7,14 +7,14 @@ set terserPath="terser.cmd"
 
 set module=callq
 
-if not exist ./release md release
+if not exist ./debug md debug
 
-call %browserifyPath% -p %bundleCollapserPath% -o ./release/bundle.min.js -v ^
+call %browserifyPath% -p %bundleCollapserPath% -o ./debug/bundle.release.js -v ^
 	-t [ %globalModulePath%/stringify --extensions [.html .css .htm ] --minify true ] ^
 	-r ./%module%.js:%module%
 
 echo on
 
-call %terserPath% ./release/bundle.min.js -o ./release/bundle.min.js -c -m
+call %terserPath% ./debug/bundle.release.js -o ./debug/bundle.release.js -c -m
 
 pause

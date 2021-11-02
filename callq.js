@@ -30,6 +30,9 @@ convention:
 			{ label:"labelN", timeout:timeoutN, op:operatorN }
 
 			* label: default-label string for the operator;
+				* a label prefixed ":" char is a sub procedure label.
+					* the procedure will be skipped by normal process;
+					* it can be called by .pick() later;
 			* timeout: default-timeout number for the operator, in milliseconds;
 			* op:
 				* an operator function.
@@ -42,7 +45,6 @@ convention:
 		
 			* the `label` here can be a label-range, defined as string "label1:label2",
 					that is a new array extracted from an existig operator-array, that from `label1` to `label2`(included).
-				* so a normal label shouldn't contain character ':'.
 				* a label-range will clear preceding `label` and `timeout`
 
 		* or a mixed array of the 2 above formats;
@@ -133,46 +135,45 @@ CallQueueClass.prototype = {
 		this.queue = [];
 		this.labelSet = {}
 
-		var i, imax = operatorArray.length, oai, oai_ts, op, timeout, label, newLabel, qi, rqi;
+		var i, imax = operatorArray.length, oai, oai_ts, op, timeout, defaultLabel, newLabel, qi, rqi;
 		for (i = 0; i < imax; i++) {
 			oai = operatorArray[i];
 			oai_ts = typeof (oai);
 
+			if (oai_ts === "number") { timeout = timeout || oai; continue; }	//timeout
+
 			if (oai_ts === "function") {	//op
 				op = oai;
-				if (op.name && op.name != "anonymous") label = op.name;
+				if (op.name && op.name != "anonymous") defaultLabel = defaultLabel || op.name;
 			}
-			else if (oai_ts === "number") { timeout = oai; }	//timeout
 			else if (oai_ts === "string") {		//label or op
+				if (oai.charAt(0) === ":") { newLabel = newLabel || oai; continue; }	//a sub procedure label
+
 				if (refProcess && refProcess.queue && refProcess.operatorSet === this.operatorSet) {
 					if (oai.indexOf(':') > 0) {
-						//label-range, copy from source
+						//label-range, copy from source; preceding label and timeout is cleared.
 						var sa = oai.split(":").map(function (si) { return refProcess.labelIndex(si); });
 						for (var j = sa[0]; j <= sa[1]; j++) {
-							rqi = refProcess.queue[j];
-							if (rqi.label) this.labelSet[rqi.label] = this.queue.length;
+							rqi = refProcess.queue[j];	//in label-range, procedure is still procedure
+							if (rqi.label) this.labelSet[rqi.label.replace(/^\:/, "")] = this.queue.length;
 							this.queue.push(rqi);
 						}
-						op = timeout = label = newLabel = null;
+						op = timeout = defaultLabel = newLabel = null;
 						continue;
 					}
 					else if (oai in refProcess.labelSet) {
 						rqi = refProcess.queue[refProcess.labelIndex(oai)];
-						if (timeout || label || newLabel) {
-							/*
-							rqi = Object.create(rqi);
-							if (timeout) rqi.timeout = timeout;
-							if (label || newLabel) rqi.label = newLabel || label;
-							*/
-							rqi = {		//override rqi
-								timeout: timeout || rqi.timeout,
-								label: newLabel || label || rqi.label,
-								op: rqi.op,
-							};
-						}
-						if (rqi.label) this.labelSet[rqi.label] = this.queue.length;
+
+						rqi = {		//override rqi
+							timeout: timeout || rqi.timeout,
+							label: newLabel || defaultLabel ||
+								(rqi.label && rqi.label.replace(/^\:/, "")),	//procedure is copied out
+							op: rqi.op,
+						};
+
+						if (rqi.label) this.labelSet[rqi.label.replace(/^\:/, "")] = this.queue.length;
 						this.queue.push(rqi);
-						op = timeout = label = newLabel = null;
+						op = timeout = defaultLabel = newLabel = null;
 						continue;
 					}
 				}
@@ -180,39 +181,45 @@ CallQueueClass.prototype = {
 				if (this.operatorSet && oai in this.operatorSet) {
 					op = this.operatorSet[oai];
 					if (typeof op !== "function") throw "cq format fail, not function label, " + oai;
-					label = oai;
+					defaultLabel = oai;
 				}
-				else { newLabel = oai; }
+				else {
+					if (newLabel) {
+						if (newLabel !== oai && this.debug > 0)		//warn if label and function name maybe mixed
+							console.warn("WARN: cq parsing, duplicated label, " + newLabel + ", " + oai);
+					}
+					else newLabel = oai;
+				}
 			}
 			else if (oai_ts === "object") {
-				if (oai.label && !newLabel) { newLabel = oai; }		//new label cover the old
-				if (oai.timeout && !timeout) { timeout = oai; }		//new timeout cover the old
+				if (oai.label) { newLabel = newLabel || oai.label; }		//new label cover the old
+				if (oai.timeout) { timeout = timeout || oai.timeout; }		//new timeout cover the old
 				if (oai.op) {
 					if (typeof oai.op === "function") {
 						op = oai.op;
-						if (oai.op.name && oai.op.name != "anonymous") label = oai.op.name;
+						if (op.name && op.name != "anonymous") defaultLabel = defaultLabel || op.name;
 					}
 					else {
 						if (!this.operatorSet) throw "cq format fail, empty operatorSet for label, " + oai.op;
 						op = this.operatorSet[oai.op];
 						if (typeof op !== "function") throw "cq format fail, not function label, " + oai.op;
-						label = oai.op;
+						defaultLabel = "" + oai.op;
 					}
 				}
 			}
 
 			if (!op) continue;		//wait op
 
-			label = newLabel || label;
-			if (label) {
-				this.labelSet[label] = this.queue.length;		//old label index may be replaced
-				qi = { label: label, timeout: timeout, op: op };
+			newLabel = newLabel || defaultLabel;
+			if (newLabel) {
+				this.labelSet[newLabel.replace(/^\:/, "")] = this.queue.length;		//old label index may be replaced
+				qi = { label: newLabel, timeout: timeout, op: op };
 			}
 			else { qi = { timeout: timeout, op: op }; }
 
 			this.queue.push(qi);
 
-			op = timeout = label = newLabel = null;
+			op = timeout = defaultLabel = newLabel = null;
 		}
 
 		//build emulated root operatorSet when root operatorSet is empty in array mode
@@ -374,7 +381,12 @@ CallQueueClass.prototype = {
 		if (error && !(error instanceof Error)) error = Error(error);
 
 		//get next queue item
-		var qi = this.queue[this.index];
+		var qi;
+		while ((qi = this.queue[this.index]) &&
+			qi.label && qi.label.charAt(0) === ":") {		//skip sub procedure
+			this.index++;
+		}
+
 		if (!qi) {
 			//process finish
 			if (this.state != STATE_PROCESS_TIMEOUT) this.state = STATE_PROCESS_FINISHED;	//keep process timeout state

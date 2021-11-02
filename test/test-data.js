@@ -893,6 +893,34 @@ module.exports = {
 		cq(null, queData, "p2");
 	},
 
+	"procedure": function (done) {
+		var seq = [];
+		cq(null, [
+			function (error, data, que) {
+				seq.push(data = "1");
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			":2", function (error, data, que) {
+				seq.push(data = data + ",2");
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			"3", function (error, data, que) {
+				seq.push(data = data + ",3");
+				setTimeout(function () { que.pick(error, data, "2"); }, 50);
+			},
+			"4", function (error, data, que) {
+				seq.push(data = data + ",4");
+
+				showResult(seq.join("\n"), 3);
+
+				data = seq[seq.length - 1];
+				var expect = "1,3,2,4";
+				done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				que.next(null, data);
+			},
+		], "procedure");
+	},
+
 };
 
 // for html page
