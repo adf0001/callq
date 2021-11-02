@@ -59,9 +59,10 @@ convention:
 			.next()	/ .wait() / .waitVoid()	/ thread
 				.jump()	/ thread
 					.pick() / .run() / process
-						.if() / ifError() / ifData()
+						.if()
 						.loop()
 						.fork()
+						.final()
 
 						cq.join()
 
@@ -310,13 +311,6 @@ CallQueueClass.prototype = {
 		return this.pick(error, data, condition ? trueArray : falseArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
 	},
 
-	ifError: function (error, data, errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
-		return this["if"](error, data, !error, errorArray, null, ifTimeout, finalLabel, finalTimeout, ifDescription);
-	},
-	ifData: function (error, data, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
-		return this["if"](error, data, !error, null, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
-	},
-
 	//initCondition: a function(condition:{error, data}), or directly a condition object whose shallow properties is protected;
 	//checkCondition: a function(condition) return boolean value; or null to check error/data
 	"loop": function (error, data, initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription) {
@@ -351,6 +345,20 @@ CallQueueClass.prototype = {
 			this.process.index = jumpLabel;
 		}
 		return this.next(error, data, jumpTimeout);
+	},
+
+	//jump to the last, or user-defined final step
+	final: function (error, data, finalArray, finalTimeout) {
+		if (!finalArray) {
+			this.process.index = this.queue.length - 1;	//jump to the last
+			return this.next(error, data, finalTimeout);
+		}
+
+		//appoint final step
+
+		this.process.index = this.queue.length;		//stop current process
+
+		this.pick(error, data, finalArray, finalTimeout);
 	},
 
 	//next step
@@ -574,21 +582,15 @@ var _if = function (condition, falseArray, trueArray, ifTimeout, finalLabel, fin
 	}
 }
 
-var ifError = function (errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
-	return function (error, data, que) {
-		return que.ifError(error, data, errorArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
-	}
-}
-
-var ifData = function (dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
-	return function (error, data, que) {
-		return que.ifData(error, data, dataArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
-	}
-}
-
 var _loop = function (initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription) {
 	return function (error, data, que) {
 		return que.loop(error, data, initCondition, checkCondition, loopArray, finalLabel, finalTimeout, loopDescription);
+	}
+}
+
+var final = function ( finalArray, finalTimeout) {
+	return function (error, data, que) {
+		return que.final(error, data, finalArray, finalTimeout);
 	}
 }
 
@@ -666,9 +668,8 @@ exports.isQue = function (obj) { return (obj instanceof CallQueueClass); }
 exports.jump = createFlow("jump");
 exports.pick = createFlow("pick");
 exports.if = createFlow("if");
-exports.ifError = createFlow("ifError");
-exports.ifData = createFlow("ifData");
 exports.loop = createFlow("loop");
+exports.final = createFlow("final");
 
 exports.fork = fork;
 

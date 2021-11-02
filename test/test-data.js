@@ -921,6 +921,71 @@ module.exports = {
 		], "procedure");
 	},
 
+	"final": function (done) {
+		var seq = [];
+		cq(null, [
+			function (error, data, que) {
+				seq.push(data = "1");
+				setTimeout(function () { que.next(1, data); }, 50);
+			},
+			"2", function (error, data, que) {
+				seq.push(data = data + ",2");
+				if (error) return que.final(error, data);
+
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			"3", function (error, data, que) {
+				seq.push(data = data + ",3");
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			"4", function (error, data, que) {
+				seq.push(data = data + ",4");
+
+				showResult(seq.join("\n"), 3);
+
+				data = seq[seq.length - 1];
+				var expect = "1,2,4";
+				done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				que.next(null, data);
+			},
+		], "final");
+	},
+
+	"final-appoint": function (done) {
+		var seq = [];
+		cq(null, [
+			function (error, data, que) {
+				seq.push(data = "1");
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			"2", function (error, data, que) {
+				seq.push(data = data + ",2");
+
+				setTimeout(function () { que.next(1, data); }, 50);
+			},
+			"3", function (error, data, que) {
+				seq.push(data = data + ",3");
+
+				console.log("process id brefore final: " + que.process.processId);
+
+				if (error) return que.final(error, data, ["2", "4"]);
+
+				setTimeout(function () { que.next(error, data); }, 50);
+			},
+			"4", function (error, data, que) {
+				seq.push(data = data + ",4");
+				console.log("process id of final: " + que.process.processId);
+
+				showResult(seq.join("\n"), 3);
+
+				data = seq[seq.length - 1];
+				var expect = "1,2,3,2,4";
+				done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				que.next(null, data);
+			},
+		], "final-appoint");
+	},
+
 };
 
 // for html page
