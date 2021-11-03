@@ -1,10 +1,7 @@
 
-"use strict";
+// callq @ npm, call queue.
 
 /*
-
-call queue
-
 convention:
 
 	* an 'error-data-que' callback function, named `operator`, is defined as:
