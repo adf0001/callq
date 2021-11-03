@@ -293,7 +293,17 @@ CallQueueClass.prototype = {
 		return this.run(error, data, pickArray.concat(cb), pickTimeout, cb, pickDescription);
 	},
 
-	//condition: a function(error, data) returned boolean value, or `null` to check error/data, or a boolean value.
+	/*
+	condition:
+		function
+			a function(error, data) return boolean value;
+		`null`
+			to check ! `error`;
+		boolean value
+			to check ! `error` && boolean(`data`);
+		other
+			to check ! `error` && `data`==other;
+	*/
 	"if": function (error, data, condition, falseArray, trueArray, ifTimeout, finalLabel, finalTimeout, ifDescription) {
 		if (isOmitTimeout(ifTimeout)) {		//optional ifTimeout
 			ifDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = ifTimeout; ifTimeout = 0;
@@ -303,7 +313,10 @@ CallQueueClass.prototype = {
 		}
 
 		if (typeof condition === "function") condition = condition(error, data);
-		else if (condition === null) condition = error;
+		else if (condition === null) condition = !error;
+		else if (condition === true) condition = !error && data;
+		else if (condition === false) condition = !error && !data;
+		else condition = !error && data == condition;
 
 		return this.pick(error, data, condition ? trueArray : falseArray, ifTimeout, finalLabel, finalTimeout, ifDescription);
 	},

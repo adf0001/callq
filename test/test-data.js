@@ -344,7 +344,7 @@ module.exports = {
 			},
 		], "pick-timeout");
 	},
-	"process if": function (done) {
+	"if": function (done) {
 		var seq = [];
 		cq(null, [
 			function (error, data, que) {
@@ -352,7 +352,7 @@ module.exports = {
 				seq.push("seconds= " + num);
 
 				seq.push(data = "1-if");
-				setTimeout(function () { que.if(null, data, (num % 2), "even", "odd", "end-if", "sub"); }, 50);
+				setTimeout(function () { que.if(null, data, function (err, data) { return (num % 2); }, "even", "odd", "end-if", "sub"); }, 50);
 			},
 			"odd", function (error, data, que) {
 				seq.push(data = data + ",2-odd");
@@ -376,7 +376,7 @@ module.exports = {
 			},
 		], "if");
 	},
-	"process if-operatorSet": function (done) {
+	"if-operatorSet": function (done) {
 		var seq = [];
 		var myObj = {
 			f1: function (error, data, que) {
@@ -384,7 +384,7 @@ module.exports = {
 				seq.push("seconds= " + num);
 
 				seq.push(data = "1-if");
-				setTimeout(function () { que.if(null, data, function (err, data) { return (num % 2); }, "even", "odd", "end-if", "sub"); }, 50);
+				setTimeout(function () { que.if(null, data, !!(num % 2), "even", "odd", "end-if", "sub"); }, 50);
 			},
 			"odd": function (error, data, que) {
 				seq.push(data = data + ",2-odd");
@@ -410,6 +410,7 @@ module.exports = {
 
 		cq(myObj, ["f1", "odd", "even", "end-if", "f5"], "if-operatorSet");
 	},
+
 	"loop": function (done) {
 		var seq = [];
 		cq(null, [
