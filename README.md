@@ -96,8 +96,7 @@ cq(myObj, ["f1", "f2", "f3", "f4"] );
 					.loop()
 					.fork()
 					.final()
-
-					cq.join()
+					.joinAt()
 
 * all *-timeout arguments are optional.
 

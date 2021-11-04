@@ -613,6 +613,48 @@ module.exports = {
 		], 'fork-any');
 	},
 
+	"joinAt": function (done) {
+		var seq = ["0"];
+
+		var doneFlag = 0;
+
+		var jp = {};	//join point
+
+		var queData = [
+			function (error, data, que) {
+				seq.push(data = seq[seq.length - 1] + ",1");
+				setTimeout(function () { que.joinAt(null, data, jp, "slow", "3", "join-1"); }, 50);
+			},
+			"slow", function (error, data, que) {
+				console.log("slow " + que.processId);
+				seq.push(data = seq[seq.length - 1] + ",2-slow");
+				//lastQue = que;
+				setTimeout(function () { que.next(null, data); }, 300);
+			},
+			"3", function (error, data, que) {
+				console.log("3 " + que.processId);
+				seq.push(data = seq[seq.length - 1] + ",3");
+				setTimeout(function () { que.next(null, data); }, 50);
+			},
+			function (error, data, que) {
+				showResult(seq.join("\n"), 3);
+
+				data = seq[seq.length - 1];
+				var expect = "0,1,1,2-slow,3,3";
+
+				if (doneFlag) {
+					done((data == expect) ? null : Error("expect (" + expect + ") but (" + data + ")"));
+				}
+				doneFlag++;
+
+				que.next(null, data);
+			},
+		];
+
+		cq(null, queData, "p1");
+		cq(null, queData, "p2");
+	},
+
 	".isQue()": function (done) {
 		cq(null, [
 			function (error, data, que) {
@@ -852,7 +894,7 @@ module.exports = {
 		], 'flow:fork-any');
 	},
 
-	"flow:join()": function (done) {
+	"flow:joinAt": function (done) {
 		var seq = ["0"];
 
 		var doneFlag = 0;
@@ -862,7 +904,7 @@ module.exports = {
 				seq.push(data = seq[seq.length - 1] + ",1");
 				setTimeout(function () { que.next(null, data); }, 50);
 			},
-			cq.join("slow", "3", "join-1"),
+			cq.joinAt({}, "slow", "3", "join-1"),	//if the 2 ques are not called in same scope, the joinPoint `{}` should be saved elsewhere.
 			"slow", function (error, data, que) {
 
 				console.log("slow " + que.processId);

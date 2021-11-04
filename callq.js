@@ -60,8 +60,7 @@ convention:
 						.loop()
 						.fork()
 						.final()
-
-						cq.join()
+						.joinAt()
 
 	* all *-timeout arguments are optional.
 
@@ -567,8 +566,58 @@ CallQueueClass.prototype = {
 		}
 	},
 
-}
+	/*
+	joinPoint: 
+		A user-stored Object, into which internal control data will be filled, such as { running, queDataList }.
+		If it's null or not an Object, .joinAt() is same as .pick().
+	*/
+	joinAt: function (error, data, joinPoint, firstJoinArray, firstJoinTimeout, finalLabel, finalTimeout, joinDescription) {
+		if (isOmitTimeout(firstJoinTimeout)) {		//optional firstJoinTimeout
+			joinDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = firstJoinTimeout; firstJoinTimeout = 0;
+		}
+		if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
+			joinDescription = finalTimeout; finalTimeout = 0;
+		}
 
+		if (!joinPoint || typeof joinPoint !== "object")
+			return this.pick(error, data, firstJoinArray, firstJoinTimeout, finalLabel, finalTimeout, joinDescription);
+
+		//enter join point
+		if (!joinPoint.queDataList) joinPoint.queDataList = [];
+		joinPoint.queDataList.push([this, finalLabel, finalTimeout]);
+
+		if (joinPoint.running) return;		//alreading running, return to wait
+
+		joinPoint.running = true;
+
+		//join
+
+		var cb = function (error, data, que) {
+			var ret, ret0, ret0Done, queData;
+
+			while (joinPoint.queDataList.length > 0) {
+				try {
+					queData = joinPoint.queDataList.shift();
+					ret = queData[0].jump(error, data, queData[1], queData[2]);
+				}
+				catch (ex) {
+					console.warn("cq join exception", ex);
+					ret = ex;
+				}
+
+				if (queData[0] === que) { ret0 = ret; ret0Done = true; }		//get 1st ret
+			}
+
+			delete joinPoint.running;	//join finish
+			if (ret0Done) return ret0;
+
+			return que.jump(error, data, finalLabel, finalTimeout);		//if the 1st is not call, manually call it.
+		}
+
+		return this.pick(error, data, firstJoinArray, firstJoinTimeout, cb, joinDescription);
+	},
+
+}
 
 //////////////////////////////////////////////////
 //flow control
@@ -598,9 +647,15 @@ var _loop = function (initCondition, checkCondition, loopArray, finalLabel, fina
 	}
 }
 
-var final = function ( finalArray, finalTimeout) {
+var _final = function (finalArray, finalTimeout) {
 	return function (error, data, que) {
 		return que.final(error, data, finalArray, finalTimeout);
+	}
+}
+
+var joinAt = function (joinPoint, firstJoinArray, firstJoinTimeout, finalLabel, finalTimeout, joinDescription) {
+	return function (error, data, que) {
+		return que.joinAt(error, data, joinPoint, firstJoinArray, firstJoinTimeout, finalLabel, finalTimeout, joinDescription);
 	}
 }
 
@@ -620,43 +675,6 @@ var fork = function (forkMode, pickSet, finalLabel, finalTimeout) {
 		return que.fork(error, data, { mode: forkMode, pickSet: pickSet }, finalLabel, finalTimeout);
 	}
 }
-
-var join = function (joinArray, joinTimeout, finalLabel, finalTimeout, joinDescription) {
-	if (isOmitTimeout(joinTimeout)) {		//optional joinTimeout
-		joinDescription = finalTimeout; finalTimeout = finalLabel; finalLabel = joinTimeout; joinTimeout = 0;
-	}
-	if (isOmitTimeout(finalTimeout)) {		//optional finalTimeout
-		joinDescription = finalTimeout; finalTimeout = 0;
-	}
-
-	var running = 0;
-	var queList = [];
-
-	return function (error, data, que) {
-		queList.push(que);
-		if (running) return;
-
-		running = 1;
-		var cb = function (error, data, que) {
-			var ret, ret0, ret0Done = 0;
-
-			while (queList.length > 0) {
-				try {
-					ret = queList.shift().jump(error, data, finalLabel, finalTimeout);
-				}
-				catch (ex) { console.warn("cq join exception", ex); }
-
-				if (!ret0Done) { ret0 = ret; ret0Done = 1; }	//get 1st ret
-			}
-			running = 0;
-
-			return ret0;
-		}
-
-		return que.pick(error, data, joinArray, joinTimeout, cb, joinDescription);
-	}
-}
-
 
 //////////////////////////////////////////////////
 //module
@@ -680,7 +698,6 @@ exports.pick = createFlow("pick");
 exports.if = createFlow("if");
 exports.loop = createFlow("loop");
 exports.final = createFlow("final");
+exports.joinAt = createFlow("joinAt");
 
 exports.fork = fork;
-
-exports.join = join;
