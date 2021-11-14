@@ -230,7 +230,7 @@ CallQueueClass.prototype = {
 	},
 
 	//run a new process
-	run: function (error, data, operatorArray, runTimeout, runTimeoutLabel, runDescription) {
+	"run": function (error, data, operatorArray, runTimeout, runTimeoutLabel, runDescription) {
 		if (isOmitTimeout(runTimeout)) {		//optional runTimeout
 			runDescription = runTimeoutLabel; runTimeoutLabel = runTimeout; runTimeout = 0;
 		}
@@ -345,7 +345,7 @@ CallQueueClass.prototype = {
 	},
 
 	//when `jumpLabel` is null, `.jump()` is same as `.next()`
-	jump: function (error, data, jumpLabel, jumpTimeout) {
+	"jump": function (error, data, jumpLabel, jumpTimeout) {
 		if (jumpLabel) {
 			if (typeof jumpLabel !== "function") jumpLabel = this.labelIndex(jumpLabel, true);
 
@@ -357,7 +357,7 @@ CallQueueClass.prototype = {
 	},
 
 	//jump to the last, or user-defined final step
-	final: function (error, data, finalArray, finalTimeout) {
+	"final": function (error, data, finalArray, finalTimeout) {
 		if (!finalArray) {
 			this.process.index = this.queue.length - 1;	//jump to the last
 			return this.next(error, data, finalTimeout);
@@ -460,7 +460,7 @@ CallQueueClass.prototype = {
 	},
 
 	//enclose `.next()` to error-first callback( error, data )
-	wait: function (/*error, data,*/ waitTimeout, nextTimeout) {
+	"wait": function (/*error, data,*/ waitTimeout, nextTimeout) {
 		var tmid = null;
 		var _this = this;
 
@@ -512,7 +512,7 @@ CallQueueClass.prototype = {
 
 	async callback: ( error, [ result, resultCount, lastResultLabel ] )
 	*/
-	fork: function (error, data, forkSettings, finalLabel, finalTimeout) {
+	"fork": function (error, data, forkSettings, finalLabel, finalTimeout) {
 		var result = {};	//map labelN to [ errorN, dataN ]
 		var resultCount = 0, blocked = false;
 		var resultCountMax = Object.keys(forkSettings.pickSet).length;
@@ -670,7 +670,7 @@ function createFlow(name) {
 	}
 }
 
-var fork = function (forkMode, pickSet, finalLabel, finalTimeout) {
+var _fork = function (forkMode, pickSet, finalLabel, finalTimeout) {
 	return function (error, data, que) {
 		return que.fork(error, data, { mode: forkMode, pickSet: pickSet }, finalLabel, finalTimeout);
 	}
@@ -700,4 +700,4 @@ exports.loop = createFlow("loop");
 exports.final = createFlow("final");
 exports.joinAt = createFlow("joinAt");
 
-exports.fork = fork;
+exports.fork = _fork;

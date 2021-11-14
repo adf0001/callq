@@ -13,6 +13,11 @@
     "type": "git",
     "url": "git+https://github.com/adf0001/callq.git"
   },
+  "keywords": [
+    "call",
+    "queue",
+    "async"
+  ],
   "author": "fwg",
   "license": "ISC",
   "bugs": {
