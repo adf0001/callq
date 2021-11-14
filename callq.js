@@ -395,7 +395,7 @@ CallQueueClass.prototype = {
 		if (this.process !== this) { throw Error("cq process pointer fail"); }
 
 		//normalize error
-		if (error && !(error instanceof Error)) error = Error(error);
+		if (error && !(error instanceof Error)) error = Error(JSON.stringify(error).slice(0, 300));;
 
 		//get next queue item
 		var qi;
